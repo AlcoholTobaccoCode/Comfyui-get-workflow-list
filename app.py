@@ -246,8 +246,12 @@ def trigger_fetch(search=''):
 
 @app.route('/api/total-pages')
 def get_total_pages():
-    """API: 查询工作流总页数（不抓取数据，只查询第一页获取总数）"""
+    """API: 查询工作流总页数（不获取数据，只查询第一页获取总数）"""
     import requests
+    from flask import request
+    
+    # 从 query 参数获取搜索关键词
+    search = request.args.get('search', '')
     
     # 从环境变量读取 token
     auth_token = os.getenv("RUNNINGHUB_AUTH_TOKEN")
@@ -280,7 +284,7 @@ def get_total_pages():
     payload = {
         "size": 30,
         "current": 1,
-        "search": "",
+        "search": search,
         "tags": []
     }
     
@@ -440,8 +444,8 @@ def run_server(host='127.0.0.1', port=5000, debug=False):
 
 
 if __name__ == '__main__':
-    # 从环境变量读取端口，默认 5000
-    port = int(os.getenv('PORT', 5000))
+    # 从环境变量读取端口，默认 5500
+    port = int(os.getenv('PORT', 5500))
     host = os.getenv('HOST', '0.0.0.0')  # PM2 使用 0.0.0.0
     debug = os.getenv('FLASK_ENV') != 'production'
     

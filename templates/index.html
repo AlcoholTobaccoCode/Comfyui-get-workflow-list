@@ -676,7 +676,7 @@
         <!-- 搜索输入区域 -->
         <div class="search-container">
             <div class="search-box">
-                <input type="text" id="searchInput" class="search-input" placeholder="输入搜索关键词，如：换装、风格化、人物...">
+                <input type="text" id="searchInput" class="search-input" placeholder="输入搜索关键词，如：换装、风格化、人物..." onblur="handleSearchInputBlur()">
                 <button class="search-button" onclick="handleSearch()">🔍 搜索</button>
                 <button class="search-all-button" onclick="handleSearchAll()">📚 搜索全部</button>
             </div>
@@ -686,6 +686,12 @@
                 <span>最大页数：</span>
                 <input type="number" id="pageLimitInput" class="page-limit-input" value="10" min="1" max="100">
                 <span class="page-limit-info" id="pageLimitInfo">（查询中...）</span>
+            </div>
+            
+            <!-- 获取进度显示 -->
+            <div id="fetchProgress" class="page-limit-container" style="display: none;">
+                <span>📊 获取进度：</span>
+                <span class="page-limit-info" id="fetchProgressInfo">0/0 页</span>
             </div>
             
             <!-- 历史搜索记录 -->
@@ -762,7 +768,7 @@
         let lazyLoadObserver = null; // 懒加载观察器
         let renderedCards = new Set(); // 已渲染的卡片缓存
         let currentSearch = '换装'; // 当前搜索关键词
-        let fetchCheckInterval = null; // 抓取检查定时器
+        let fetchCheckInterval = null; // 获取检查定时器
 
         // 打开图片/视频预览
         function openImageModal(mediaSrc, caption = '') {
@@ -892,7 +898,7 @@
                 const response = await fetch(`/api/search/${searchPath}`);
                 
                 if (response.status === 202) {
-                    // 需要抓取数据
+                    // 需要获取数据
                     const result = await response.json();
                     showSearchHint(result.message, 'warning');
                     showFetchingUI();
@@ -900,7 +906,7 @@
                     // 保存搜索历史（空搜索保存为"所有"）
                     saveSearchHistory(search || '所有');
                     
-                    // 触发抓取
+                    // 触发获取
                     await triggerFetch(search);
                     
                     // 开始轮询检查
@@ -950,7 +956,7 @@
                 const response = await fetch(`/api/search/all`);
                 
                 if (response.status === 202) {
-                    // 需要抓取数据
+                    // 需要获取数据
                     const result = await response.json();
                     showSearchHint(result.message, 'warning');
                     showFetchingUI();
@@ -958,7 +964,7 @@
                     // 保存搜索历史
                     saveSearchHistory('所有');
                     
-                    // 触发抓取（带页数限制）
+                    // 触发获取（带页数限制）
                     await triggerFetchWithLimit('', maxPages);
                     
                     // 开始轮询检查
@@ -986,22 +992,37 @@
         }
 
         // 查询总页数
-        async function queryTotalPages() {
+        async function queryTotalPages(search = '') {
             try {
-                const response = await fetch('/api/total-pages');
+                const searchPath = search ? encodeURIComponent(search) : '';
+                const url = searchPath ? `/api/total-pages?search=${searchPath}` : '/api/total-pages';
+                const response = await fetch(url);
                 const result = await response.json();
                 
                 if (result.total_pages) {
                     const infoSpan = document.getElementById('pageLimitInfo');
-                    infoSpan.textContent = `（共约 ${result.total_pages} 页，${result.total_count} 个工作流）`;
+                    const displaySearch = search ? `"${search}"` : '所有';
+                    infoSpan.textContent = `（${displaySearch}：约 ${result.total_pages} 页，${result.total_count} 个工作流）`;
                 }
             } catch (error) {
                 console.error('查询总页数失败:', error);
                 document.getElementById('pageLimitInfo').textContent = '（查询失败）';
             }
         }
+        
+        // 搜索框失焦事件
+        async function handleSearchInputBlur() {
+            const searchInput = document.getElementById('searchInput');
+            const search = searchInput?.value?.trim();
+            
+            // 显示页码限制容器
+            document.getElementById('pageLimitContainer').classList.add('show');
+            
+            // 根据搜索内容查询对应的总页数
+            await queryTotalPages(search);
+        }
 
-        // 触发抓取（带页数限制）
+        // 触发获取（带页数限制）
         async function triggerFetchWithLimit(search, maxPages) {
             try {
                 const searchPath = search ? encodeURIComponent(search) : 'all';
@@ -1013,9 +1034,9 @@
                     body: JSON.stringify({ max_pages: maxPages })
                 });
                 const result = await response.json();
-                console.log('触发抓取:', result);
+                console.log('触发获取:', result);
             } catch (error) {
-                console.error('触发抓取失败:', error);
+                console.error('触发获取失败:', error);
             }
         }
 
@@ -1034,21 +1055,24 @@
             }
         }
 
-        // 显示抓取中的 UI
+        // 显示获取中的 UI
         function showFetchingUI() {
             const displaySearch = currentSearch || '所有';
             document.getElementById('content').innerHTML = `
                 <div class="loading">
                     <div class="loading-spinner"></div>
-                    <p>正在抓取 "${displaySearch}" 的数据...</p>
+                    <p>正在获取 "${displaySearch}" 的数据...</p>
                     <p style="font-size: 14px; color: #666; margin-top: 10px;">
                         这可能需要几分钟时间，请耐心等待
                     </p>
                 </div>
             `;
+            
+            // 显示获取进度
+            document.getElementById('fetchProgress').style.display = 'flex';
         }
 
-        // 触发抓取
+        // 触发获取
         async function triggerFetch(search) {
             try {
                 // 空搜索使用特殊路径 "all"
@@ -1057,13 +1081,13 @@
                     method: 'POST'
                 });
                 const result = await response.json();
-                console.log('触发抓取:', result);
+                console.log('触发获取:', result);
             } catch (error) {
-                console.error('触发抓取失败:', error);
+                console.error('触发获取失败:', error);
             }
         }
 
-        // 开始轮询检查抓取状态
+        // 开始轮询检查获取状态
         function startFetchCheck(search) {
             if (fetchCheckInterval) {
                 clearInterval(fetchCheckInterval);
@@ -1082,19 +1106,40 @@
                             clearInterval(fetchCheckInterval);
                             fetchCheckInterval = null;
                             
+                            // 隐藏获取进度
+                            document.getElementById('fetchProgress').style.display = 'none';
+                            
                             currentData = data;
                             displayData(data);
-                            showSearchHint(`抓取完成！找到 ${data.total_count} 个工作流`, 'success');
+                            showSearchHint(`获取完成！找到 ${data.total_count} 个工作流`, 'success');
                             
                             // 显示数据控制区域并加载搜索列表
                             document.getElementById('dataControls').style.display = 'flex';
                             loadSearchList();
+                        } else {
+                            // 更新获取进度
+                            updateFetchProgress();
                         }
                     }
                 } catch (error) {
-                    console.error('检查抓取状态失败:', error);
+                    console.error('检查获取状态失败:', error);
                 }
             }, 5000); // 每5秒检查一次
+        }
+        
+        // 更新获取进度
+        async function updateFetchProgress() {
+            try {
+                const response = await fetch('/api/refresh/status');
+                const status = await response.json();
+                
+                if (status.is_running && status.total > 0) {
+                    const progressInfo = document.getElementById('fetchProgressInfo');
+                    progressInfo.textContent = `${status.current}/${status.total} 页 - ${status.message}`;
+                }
+            } catch (error) {
+                console.error('更新获取进度失败:', error);
+            }
         }
 
         // 历史搜索记录管理
@@ -1687,7 +1732,7 @@
                 messageDiv.textContent = `正在刷新 "${currentSearch}" 的数据...`;
                 progressFill.style.width = '0%';
                 
-                // 触发抓取
+                // 触发获取
                 await triggerFetch(currentSearch);
                 
                 // 开始轮询刷新状态
